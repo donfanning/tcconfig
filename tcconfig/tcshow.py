@@ -9,11 +9,12 @@ from __future__ import absolute_import
 from __future__ import print_function
 from __future__ import unicode_literals
 
-import json
 import sys
 
 import logbook
 import subprocrunner
+
+import simplejson as json
 
 from ._argparse_wrapper import ArgparseWrapper
 from ._common import (
@@ -63,13 +64,13 @@ def main():
     for device in options.device:
         try:
             verify_network_interface(device)
-        except NetworkInterfaceNotFoundError as e:
-            logger.debug(str(e))
-            continue
 
-        tc_param.update(TcShapingRuleParser(
-            device, options.ip_version, options.tc_command_output, logger
-        ).get_tc_parameter())
+            tc_param.update(TcShapingRuleParser(
+                device, options.ip_version, options.tc_command_output, logger
+            ).get_tc_parameter())
+        except NetworkInterfaceNotFoundError as e:
+            logger.debug(e)
+            continue
 
     command_history = "\n".join(subprocrunner.SubprocessRunner.get_history())
 

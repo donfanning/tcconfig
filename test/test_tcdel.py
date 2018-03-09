@@ -4,7 +4,9 @@
 .. codeauthor:: Tsuyoshi Hombashi <tsuyoshi.hombashi@gmail.com>
 """
 
+import errno
 import json
+import os
 
 import pytest
 from subprocrunner import SubprocessRunner
@@ -28,6 +30,8 @@ class Test_tcdel(object):
     """
 
     def test_normal_ipv4(self, device_value):
+        if os.getuid() != 0:
+            pytest.skip("must be root to execute the test case")
         if device_value is None:
             pytest.skip("device option is null")
 
@@ -86,7 +90,7 @@ class Test_tcdel(object):
                 "loss": 0.01,
                 "duplicate": 0.5,
                 "reorder": 0.2,
-                "rate": 248,
+                "rate": "248",
                 "delay-distro": "2.0ms"
             },
             "dst-network=192.168.1.0/24, protocol=ip": {
@@ -119,16 +123,16 @@ class Test_tcdel(object):
         print("[actual]\n{}\n".format(runner.stdout))
         assert json.loads(runner.stdout) == json.loads(expected)
 
-        assert SubprocessRunner(" ".join([
-            Tc.Command.TCDEL, device_option,
-            "--network", "192.168.1.0/24",
-        ])).run() == 0
-        assert SubprocessRunner(" ".join([
+        tcdel_proc = SubprocessRunner(" ".join([
+            Tc.Command.TCDEL, device_option, "--network", "192.168.1.0/24"]))
+        assert tcdel_proc.run() == 0, tcdel_proc.stderr
+        tcdel_proc = SubprocessRunner(" ".join([
             Tc.Command.TCDEL, device_option,
             "--network", "192.168.11.0/24",
             "--port", "80",
             "--direction", "incoming",
-        ])).run() == 0
+        ]))
+        assert tcdel_proc.run() == 0, tcdel_proc.stderr
 
         runner = SubprocessRunner("{:s} {:s}".format(
             Tc.Command.TCSHOW, device_option))
@@ -141,7 +145,7 @@ class Test_tcdel(object):
                 "duplicate": 0.5,
                 "filter_id": "800::800",
                 "delay-distro": "2.0ms",
-                "rate": 248,
+                "rate": "248",
                 "reorder": 0.2
             }
         },
@@ -187,6 +191,8 @@ class Test_tcdel(object):
         execute_tcdel(device_value)
 
     def test_normal_ipv6(self, device_value):
+        if os.getuid() != 0:
+            pytest.skip("must be root to execute the test case")
         if device_value is None:
             pytest.skip("device option is null")
 
@@ -251,7 +257,7 @@ class Test_tcdel(object):
                 "loss": 0.01,
                 "duplicate": 5,
                 "reorder": 2,
-                "rate": 248,
+                "rate": "248",
                 "delay-distro": "2.0ms"
             },
             "dst-network=2001:db00::/24, protocol=ipv6": {
@@ -308,7 +314,7 @@ class Test_tcdel(object):
                 "duplicate": 5,
                 "filter_id": "800::800",
                 "delay-distro": "2.0ms",
-                "rate": 248,
+                "rate": "248",
                 "reorder": 2
             }
         },
@@ -350,3 +356,9 @@ class Test_tcdel(object):
 
         # finalize ---
         execute_tcdel(device_value)
+
+    def test_abnormal(self):
+        if os.getuid() != 0:
+            pytest.skip("must be root to execute the test case")
+
+        assert execute_tcdel("not_exist_device") == errno.EINVAL

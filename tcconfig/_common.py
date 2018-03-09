@@ -45,6 +45,13 @@ def check_tc_command_installation():
         sys.exit(errno.ENOENT)
 
 
+def check_execution_authority():
+    import os
+
+    if os.getuid() != 0:
+        raise PermissionError("Permission denied (you must be root)")
+
+
 def get_anywhere_network(ip_version):
     ip_version_n = typepy.type.Integer(ip_version).try_convert()
 
@@ -156,15 +163,9 @@ def read_iface_speed(tc_device):
         return int(f.read().strip())
 
 
-def run_command_helper(command, error_regexp, message, exception=None):
-    if logger.level != logbook.DEBUG:
-        spr.set_logger(is_enable=False)
-
-    proc = spr.SubprocessRunner(command)
+def run_command_helper(command, error_regexp, notice_message, exception_class=None):
+    proc = spr.SubprocessRunner(command, error_log_level=logbook.NOTSET)
     proc.run()
-
-    if logger.level != logbook.DEBUG:
-        spr.set_logger(is_enable=True)
 
     if proc.returncode == 0:
         return 0
@@ -174,11 +175,11 @@ def run_command_helper(command, error_regexp, message, exception=None):
         logger.error(proc.stderr)
         return proc.returncode
 
-    if typepy.is_not_null_string(message):
-        logger.notice(message)
+    if typepy.is_not_null_string(notice_message):
+        logger.notice(notice_message)
 
-    if exception is not None:
-        raise exception(command)
+    if exception_class is not None:
+        raise exception_class(command)
 
     return proc.returncode
 
@@ -191,7 +192,10 @@ def run_tc_show(subcommand, device):
 
     runner = spr.SubprocessRunner(
         "tc {:s} show dev {:s}".format(subcommand, device))
-    runner.run()
+    if runner.run() != 0 and runner.stderr.find("Cannot find device") != -1:
+        # reach here if the device does not exist at the system and netiface
+        # not installed.
+        raise NetworkInterfaceNotFoundError(device=device)
 
     return runner.stdout
 
@@ -236,8 +240,7 @@ def verify_network_interface(device):
         return
 
     if device not in netifaces.interfaces():
-        raise NetworkInterfaceNotFoundError(
-            "network interface not found: {}".format(device))
+        raise NetworkInterfaceNotFoundError(device=device)
 
 
 def write_tc_script(tcconfig_command, command_history, filename_suffix=None):

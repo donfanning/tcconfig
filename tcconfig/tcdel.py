@@ -16,6 +16,7 @@ import subprocrunner
 
 from ._argparse_wrapper import ArgparseWrapper
 from ._common import (
+    check_execution_authority,
     check_tc_command_installation,
     initialize_cli,
     is_execute_tc_command,
@@ -107,6 +108,11 @@ def main():
 
     if is_execute_tc_command(options.tc_command_output):
         check_tc_command_installation()
+        try:
+            check_execution_authority()
+        except PermissionError as e:
+            logger.error(e)
+            return errno.EPERM
         is_delete_all = options.is_delete_all
     else:
         subprocrunner.SubprocessRunner.default_is_dry_run = True
@@ -116,7 +122,7 @@ def main():
     try:
         verify_network_interface(options.device)
     except NetworkInterfaceNotFoundError as e:
-        logger.error("{:s}: {}".format(e.__class__.__name__, e))
+        logger.error(e)
         return errno.EINVAL
 
     subprocrunner.SubprocessRunner.clear_history()
@@ -126,10 +132,14 @@ def main():
     normalize_tc_value(tc)
 
     return_code = 0
-    if is_delete_all:
-        return_code = tc.delete_all_tc()
-    else:
-        return_code = tc.delete_tc()
+    try:
+        if is_delete_all:
+            return_code = tc.delete_all_tc()
+        else:
+            return_code = tc.delete_tc()
+    except NetworkInterfaceNotFoundError as e:
+        logger.error(e)
+        return errno.EINVAL
 
     command_history = "\n".join(tc.get_command_history())
 

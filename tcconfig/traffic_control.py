@@ -367,11 +367,16 @@ class TrafficControl(object):
         result_list = []
 
         with logging_context("delete qdisc"):
-            returncode = run_command_helper(
-                "tc qdisc del dev {:s} root".format(self.device),
-                re.compile("RTNETLINK answers: No such file or directory"),
-                "no qdisc to delete for the outgoing device.")
-            result_list.append(returncode == 0)
+            proc = spr.SubprocessRunner(
+                "tc qdisc del dev {:s} root".format(self.device))
+            proc.run()
+            if re.search("RTNETLINK answers: No such file or directory", proc.stderr):
+                logger.notice("no qdisc to delete for the outgoing device.")
+                result_list.append(False)
+            elif re.search("Cannot find device", proc.stderr):
+                raise NetworkInterfaceNotFoundError(device=self.device)
+            else:
+                result_list.append(proc.returncode == 0)
 
         with logging_context("delete ingress qdisc"):
             returncode = run_command_helper(
@@ -427,7 +432,7 @@ class TrafficControl(object):
             ))
 
         result = run_command_helper(
-            command=filter_del_command, error_regexp=None, message=None)
+            command=filter_del_command, error_regexp=None, notice_message=None)
 
         rule_finder.clear()
         if not rule_finder.is_any_filter():
@@ -459,14 +464,14 @@ class TrafficControl(object):
                 min_value=Tc.ValueRange.LatencyTime.MIN,
                 max_value=Tc.ValueRange.LatencyTime.MAX)
         except InvalidParameterError as e:
-            raise InvalidParameterError("delay {}".format(str(e)))
+            raise InvalidParameterError("delay {}".format(e))
 
         try:
             self.latency_distro_time.validate(
                 min_value=Tc.ValueRange.LatencyTime.MIN,
                 max_value=Tc.ValueRange.LatencyTime.MAX)
         except InvalidParameterError as e:
-            raise InvalidParameterError("delay-distro {}".format(str(e)))
+            raise InvalidParameterError("delay-distro {}".format(e))
 
     def __validate_packet_loss_rate(self):
         _validate_within_min_max(

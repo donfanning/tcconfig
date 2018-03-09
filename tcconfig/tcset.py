@@ -21,6 +21,7 @@ import pyparsing as pp
 
 from ._argparse_wrapper import ArgparseWrapper
 from ._common import (
+    check_execution_authority,
     check_tc_command_installation,
     initialize_cli,
     is_execute_tc_command,
@@ -328,15 +329,21 @@ def main():
 
     if is_execute_tc_command(options.tc_command_output):
         check_tc_command_installation()
+        try:
+            check_execution_authority()
+        except PermissionError as e:
+            logger.error(e)
+            return errno.EPERM
+
     else:
         subprocrunner.SubprocessRunner.default_is_dry_run = True
 
     try:
         verify_netem_module()
     except ModuleNotFoundError as e:
-        logger.debug(str(e))
+        logger.debug(e)
     except subprocrunner.CommandNotFoundError as e:
-        logger.error(str(e))
+        logger.error(e)
 
     if typepy.is_not_null_string(options.config_file):
         return set_tc_from_file(logger, options.config_file, options.overwrite)
@@ -372,7 +379,7 @@ def main():
     try:
         tc.validate()
     except NetworkInterfaceNotFoundError as e:
-        logger.error(str(e))
+        logger.error(e)
         return errno.EINVAL
     except ipaddress.AddressValueError as e:
         logger.error(IPV6_OPTION_ERROR_MSG_FORMAT.format(e))
@@ -405,7 +412,12 @@ def main():
             "rule parameter.")
         return errno.EINVAL
 
-    return_code = tc.set_tc()
+    try:
+        return_code = tc.set_tc()
+    except NetworkInterfaceNotFoundError as e:
+        logger.error(e)
+        return errno.EINVAL
+
     command_history = "\n".join(tc.get_command_history())
 
     if options.tc_command_output == TcCommandOutput.STDOUT:
